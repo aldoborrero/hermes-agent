@@ -279,9 +279,15 @@ def bridge_tool_schemas(deferred_count: int, listing: Optional[str] = None,
             "and approvals run exactly as for any directly-listed tool.",
             {
                 "name": {"type": "string", "description": "Exact tool name to invoke."},
+                # A JSON *string*, not a free-form object: schema-constrained decoders read
+                # {"type": "object"} with no properties as "no keys allowed" and can only
+                # emit {} (NousResearch/hermes-agent#96610). resolve_underlying_call parses
+                # the string, and still accepts a native object from unconstrained backends.
                 "arguments": {
-                    "type": "object",
-                    "description": "Arguments for the tool, matching its schema.",
+                    "type": "string",
+                    "description": "The tool's arguments as a JSON object encoded in a string, "
+                                   "matching its schema (see tool_describe), "
+                                   "e.g. \"{\\\"id\\\": \\\"123\\\"}\". Use \"{}\" when it takes none.",
                 },
             },
             ["name", "arguments"],
