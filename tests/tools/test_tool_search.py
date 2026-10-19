@@ -930,3 +930,31 @@ class TestDeferredCallSchemaProbe:
         }, calls)
 
         assert validate_deferred_call_args(name, {"payload": {"anything": True}}) is None
+
+
+class TestRegression_BridgeArgumentsString96610:
+    """tool_call.arguments must not be a free-form object: schema-constrained decoders read
+    {"type": "object"} with no properties as "no keys allowed" and emit {} for every call
+    (NousResearch/hermes-agent#96610). It is declared as a JSON string instead."""
+
+    def _arguments_node(self):
+        from tools.tool_search import TOOL_CALL_NAME, bridge_tool_schemas
+        [schema] = [s for s in bridge_tool_schemas(0, None, "auto")
+                    if s["function"]["name"] == TOOL_CALL_NAME]
+        return schema["function"]["parameters"]["properties"]["arguments"]
+
+    def test_bridge_declares_no_free_form_object(self):
+        assert self._arguments_node()["type"] == "string"
+
+    @pytest.mark.parametrize("arguments", [
+        '{"datasourceUid": "vm", "expr": "up == 0"}',   # the declared shape
+        {"datasourceUid": "vm", "expr": "up == 0"},     # unconstrained backends still send objects
+    ])
+    def test_resolve_accepts_string_and_object(self, monkeypatch, arguments):
+        import tools.tool_search as ts
+        monkeypatch.setattr(ts, "is_deferrable_tool_name", lambda *a, **k: True)
+        name, args, err = ts.resolve_underlying_call(
+            {"name": "mcp__infra__query", "arguments": arguments})
+        assert err is None
+        assert name == "mcp__infra__query"
+        assert args == {"datasourceUid": "vm", "expr": "up == 0"}
