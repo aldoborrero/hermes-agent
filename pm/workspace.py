@@ -339,6 +339,12 @@ def _workspace_member(plugin_dir: Path, root: Path, *, identity: Path) -> Path:
         if project is not None and "version" not in project and "version" not in project.get("dynamic", ()):
             project["version"] = "0.0.0"
             changed = True
+        # A plugin's [dependency-groups] are its own dev/test tooling, which Hermes
+        # never installs, yet uv validates them for every workspace member. One that
+        # names the workspace root (honcho's `test` group pins hermes-agent) makes uv
+        # refuse to lock the whole workspace (#146435), so drop them from the copy.
+        if document.pop("dependency-groups", None) is not None:
+            changed = True
         if virtual or changed:
             import tomli_w
 
