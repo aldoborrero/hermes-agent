@@ -149,3 +149,28 @@ def test_buildable_member_without_a_version_gets_one_and_keeps_its_name(tmp_path
     member = _workspace_member(plugin, root, identity=plugin)
     project = tomllib.loads((member / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project == {"name": "noversion-plugin", "version": "0.0.0"}
+
+
+def test_member_drops_dependency_groups(tmp_path):
+    """A plugin's own test group naming hermes-agent must not reach the workspace:
+    uv validates every member's groups and refused to lock the whole workspace
+    (NousResearch/hermes-agent#146435, the honcho catalog plugin)."""
+    import tomllib
+    from pm.workspace import _workspace_member
+
+    plugin = tmp_path / "home" / "plugins" / "honcho"
+    plugin.mkdir(parents=True)
+    (plugin / "pyproject.toml").write_text(
+        '[project]\nname = "hermes-plugin-honcho"\nversion = "1.0.0"\n'
+        'dependencies = ["honcho-ai>=2.2.0,<3"]\n'
+        '[dependency-groups]\ntest = ["hermes-agent", "pytest==9.1.1"]\n',
+        encoding="utf-8",
+    )
+    root = tmp_path / "gen"
+    root.mkdir()
+    member = _workspace_member(plugin, root, identity=plugin)
+    document = tomllib.loads((member / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "dependency-groups" not in document
+    assert document["project"]["dependencies"] == ["honcho-ai>=2.2.0,<3"]
+    # The plugin's own copy keeps its groups.
+    assert "dependency-groups" in tomllib.loads((plugin / "pyproject.toml").read_text(encoding="utf-8"))
